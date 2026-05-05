@@ -1,0 +1,11 @@
+{
+  "urls": [
+    "https://malicious-example.invalid/disinfo",
+    "http://fake-news-demo.local/article"
+  ],
+  "telegram_users": [
+    "@blocked_demo_actor",
+    "@bezosslavik",
+    "999888777666"
+  ]
+}

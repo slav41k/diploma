@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0c1222;
+  --card: #151d33;
+  --border: #273451;
+  --muted: #94a3b8;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+  background-image: radial-gradient(
+      ellipse 120% 80% at 50% -20%,
+      rgba(56, 189, 248, 0.12),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 80% 50% at 100% 50%,
+      rgba(167, 139, 250, 0.08),
+      transparent
+    );
+  min-height: 100vh;
+}

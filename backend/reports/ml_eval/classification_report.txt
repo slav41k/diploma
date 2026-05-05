@@ -1,0 +1,10 @@
+Best model: RandomForest
+
+                precision    recall  f1-score   support
+
+bot_propaganda     0.9974    0.9977    0.9976      4696
+   human_clean     0.9974    0.9972    0.9973      4284
+
+      accuracy                         0.9974      8980
+     macro avg     0.9974    0.9974    0.9974      8980
+  weighted avg     0.9974    0.9974    0.9974      8980
