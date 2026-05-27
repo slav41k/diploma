@@ -16,6 +16,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlretrieve
+from typing import Any
 import zipfile
 
 import matplotlib.pyplot as plt
@@ -66,7 +67,7 @@ def main() -> None:
     artifacts.data_dir.mkdir(parents=True, exist_ok=True)
     artifacts.report_dir.mkdir(parents=True, exist_ok=True)
 
-    df = load_dataset(artifacts)
+    df, provenance = load_dataset(artifacts)
     X_train, X_test, y_train, y_test = train_test_split(
         df["text"],
         df["label"],
@@ -158,12 +159,12 @@ def main() -> None:
         artifacts.report_dir / "roc_curves_ovr.png",
         title=f"ROC Curves (One-vs-Rest, {best_name})",
     )
-    write_dataset_card(df, artifacts, best_name)
+    write_dataset_card(df, artifacts, best_name, provenance)
 
     print(f"Saved evaluation artifacts to: {artifacts.report_dir}")
 
 
-def load_dataset(artifacts: EvalArtifacts) -> pd.DataFrame:
+def load_dataset(artifacts: EvalArtifacts) -> tuple[pd.DataFrame, dict[str, Any]]:
     fake_path = artifacts.data_dir / "fake_news_fake.csv"
     real_path = artifacts.data_dir / "fake_news_true.csv"
     isot_ready = fake_path.exists() and real_path.exists()
@@ -191,7 +192,24 @@ def load_dataset(artifacts: EvalArtifacts) -> pd.DataFrame:
     ).str.strip()
     df = df[df["text"].str.len() > 30].copy()
     df = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
-    return df
+    provenance: dict[str, Any] = {
+        "dataset_id": "ISOT",
+        "title_uk": (
+            "ISOT Fake News Dataset (архів UVic): пари файлів Fake.csv / True.csv "
+            "зі статтями, позначеними як хибні або правдиві."
+        ),
+        "primary_urls": ISOT_DATASET_ZIP,
+        "files_used": "Fake.csv, True.csv (з архіву)",
+        "language_note": (
+            "Тексти англійською (політичні/світові новини; типові роки збору даних — орієнтовно 2016–2017)."
+        ),
+        "thesis_note_uk": (
+            "Мітки означають «хибна новина / достовірна новина», що в тексті записки мапляться на "
+            "класи системи як наближення до пропагандистського та чистого контенту; це не тотожне "
+            "автоматичному розпізнаванню «бот у Telegram». Детальніше — у docs/DATASETS_AND_ML.md."
+        ),
+    }
+    return df, provenance
 
 
 def download_and_extract_isot(
@@ -218,7 +236,9 @@ def download_and_extract_isot(
             real_path.write_bytes(src.read())
 
 
-def load_fallback_fake_or_real(artifacts: EvalArtifacts) -> pd.DataFrame:
+def load_fallback_fake_or_real(
+    artifacts: EvalArtifacts,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     csv_path = artifacts.data_dir / "fake_or_real_news.csv"
     if not csv_path.exists():
         urlretrieve(FAKE_OR_REAL_CSV, csv_path)
@@ -242,7 +262,21 @@ def load_fallback_fake_or_real(artifacts: EvalArtifacts) -> pd.DataFrame:
     ).str.strip()
     df = df[df["text"].str.len() > 30].copy()
     df = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
-    return df
+    provenance: dict[str, Any] = {
+        "dataset_id": "lutzhamel_fallback",
+        "title_uk": (
+            "Набір fake_or_real_news.csv (репозиторій lutzhamel/fake-news): рядки з полями "
+            "title, text та міткою fake/real."
+        ),
+        "primary_urls": FAKE_OR_REAL_CSV,
+        "files_used": "fake_or_real_news.csv",
+        "language_note": "Англомовні заголовки та тексти статей.",
+        "thesis_note_uk": (
+            "Використано як резерв, якщо архів ISOT недоступний; інтерпретація міток така сама — "
+            "проксі-клас для оцінки ML, не ідентичність «бот/людина» у соцмережі."
+        ),
+    }
+    return df, provenance
 
 
 def plot_metrics_bar(metrics_df: pd.DataFrame, out_path: Path) -> None:
@@ -316,36 +350,53 @@ def save_roc_ovr(
     plt.close()
 
 
-def write_dataset_card(df: pd.DataFrame, artifacts: EvalArtifacts, best_model: str) -> None:
+def write_dataset_card(
+    df: pd.DataFrame,
+    artifacts: EvalArtifacts,
+    best_model: str,
+    provenance: dict[str, Any],
+) -> None:
     out_path = artifacts.report_dir / "dataset_card.md"
     sample_size = len(df)
     counts = df["label"].value_counts().to_dict()
-    out_path.write_text(
-        "\n".join(
-            [
-                "# Dataset card for diploma ML evaluation",
-                "",
-                "## Sources",
-                f"- ISOT News dataset ZIP: {ISOT_DATASET_ZIP}",
-                "- Extracted files from archive: `Fake.csv`, `True.csv`",
-                f"- Fallback dataset (if ISOT unavailable): {FAKE_OR_REAL_CSV}",
-                "",
-                "## Processing",
-                "- Combined `title + text` into one field `text`.",
-                "- Labels mapped:",
-                "  - fake -> bot_propaganda",
-                "  - true -> human_clean",
-                "- Removed short rows (`len(text) <= 30`).",
-                "- Train/test split: 80/20, stratified.",
-                "",
-                "## Snapshot",
-                f"- Rows used: {sample_size}",
-                f"- Label distribution: `{json.dumps(counts, ensure_ascii=False)}`",
-                f"- Best model by macro F1: `{best_model}`",
-            ]
-        ),
-        encoding="utf-8",
-    )
+    lines = [
+        "# Dataset card for diploma ML evaluation",
+        "",
+        "## Який набір фактично використано в цьому прогоні",
+        f"- **Ідентифікатор:** `{provenance.get('dataset_id', '?')}`",
+        f"- **Опис:** {provenance.get('title_uk', '')}",
+        f"- **Джерело / посилання:** {provenance.get('primary_urls', '')}",
+        f"- **Файли:** {provenance.get('files_used', '')}",
+        f"- **Мова та домен:** {provenance.get('language_note', '')}",
+        f"- **Зауваження для записки:** {provenance.get('thesis_note_uk', '')}",
+        "",
+        "## Альтернативне джерело (якщо ISOT не завантажився)",
+        f"- ISOT ZIP: {ISOT_DATASET_ZIP}",
+        f"- Fallback CSV: {FAKE_OR_REAL_CSV}",
+        "",
+        "## Обробка даних",
+        "- Об’єднання `title + text` у одне поле `text`.",
+        "- Мапінг міток датасету на класи системи (проксі для метрик):",
+        "  - fake → `bot_propaganda`",
+        "  - true/real → `human_clean`",
+        "- Виключення надто коротких рядків (`len(text) <= 30`).",
+        "- Розділення train/test: **80/20**, стратифіковане за міткою.",
+        "",
+        "## Експеримент ML (окремо від Tier 1 у прод-пайплайні)",
+        "- Моделі: **TF-IDF (1–2 грами)** + `RandomForestClassifier` або `LogisticRegression`.",
+        "- Метрики на тестовій вибірці: accuracy, precision/recall/F1 (macro та weighted).",
+        "- ROC та матриця помилок будуються для **найкращої** моделі за macro F1.",
+        "",
+        "## Знімок даних у цьому прогоні",
+        f"- Кількість рядків після фільтрації: **{sample_size}**",
+        f"- Розподіл класів: `{json.dumps(counts, ensure_ascii=False)}`",
+        f"- Найкраща модель за macro F1 у цьому прогоні: **`{best_model}`**",
+        "",
+        "## Чому графіки можуть показувати дуже високі значення",
+        "- На відкритих наборах «fake vs real» новин часто є стійкі лексичні відмінності; TF-IDF їх добре відділяє.",
+        "- Це **не гарантує** таку саму якість на коротких коментарях Telegram іншою мовою та з іншим стилем — потрібна окрема розмічена вибірка під предметну область.",
+    ]
+    out_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 if __name__ == "__main__":
