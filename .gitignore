@@ -2,6 +2,9 @@
 .env.*
 !.env.example
 
+# Cursor IDE (локальні правила агента, не для репозиторію)
+.cursor/
+
 # Тимчасова сесія / hash під час двокрокового входу (telegram_session.py)
 .telegram_login_tmp.session
 .telegram_login_phone_hash
